@@ -1,4 +1,3 @@
-import os
 import signal
 import subprocess
 import unittest
@@ -8,6 +7,7 @@ from contextlib import contextmanager
 
 from random import randint
 
+import sys
 
 PORT = randint(30000, 40000)
 
@@ -31,6 +31,18 @@ def mock_server(port):
     s.close()
 
 
+@contextmanager
+def mock_client(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect(("127.0.0.1", port))
+        yield s
+    s.close()
+
+
+def prepare_message(text):
+    return socket.htons(len(text)).to_bytes(2, sys.byteorder) + text
+
+
 class TestServer(unittest.TestCase):
     def test_control_c(self):
         """Server should terminate after SIGINT."""
@@ -39,6 +51,35 @@ class TestServer(unittest.TestCase):
         p.send_signal(signal.SIGINT)
         ret = p.wait()
         self.assertEqual(ret, -2)
+
+    def test_pass_message(self):
+        port = PORT + 7
+        p = run_server(port)
+        time.sleep(1)
+
+        with mock_client(port) as a, mock_client(port) as b:
+            msg = prepare_message(b"blah")
+            a.sendall(msg)
+            received = b.recv(6)
+            assert received == msg
+
+        p.terminate()
+        p.wait()
+
+    def test_message_too_long(self):
+        port = PORT + 8
+        p = run_server(port)
+        time.sleep(1)
+
+        with mock_client(port) as a:
+            msg = prepare_message(b"w" * 1001)
+            a.settimeout(1)
+            with self.assertRaises(socket.timeout):
+                a.recv(1)
+            a.setblocking(True)
+            a.sendall(msg)
+            a.settimeout(1)
+            self.assertEqual(a.recv(1), b"")
 
 
 class TestClient(unittest.TestCase):
