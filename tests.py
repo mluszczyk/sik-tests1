@@ -25,6 +25,17 @@ def run_server(port):
 
 
 @contextmanager
+def server(port):
+    p = run_server(port)
+    time.sleep(QUANT_SECONDS)
+
+    yield p
+
+    p.terminate()
+    p.wait()
+
+
+@contextmanager
 def mock_server(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", port))
@@ -56,24 +67,17 @@ class TestServer(unittest.TestCase):
 
     def test_pass_message(self):
         port = PORT + 7
-        p = run_server(port)
-        time.sleep(QUANT_SECONDS)
 
-        with mock_client(port) as a, mock_client(port) as b:
+        with server(port), mock_client(port) as a, mock_client(port) as b:
             msg = prepare_message(b"blah")
             a.sendall(msg)
             received = b.recv(6)
             assert received == msg
 
-        p.terminate()
-        p.wait()
-
     def test_message_too_long(self):
         port = PORT + 8
-        p = run_server(port)
-        time.sleep(QUANT_SECONDS)
 
-        with mock_client(port) as a:
+        with server(port), mock_client(port) as a:
             msg = prepare_message(b"w" * 1001)
             a.settimeout(QUANT_SECONDS)
             with self.assertRaises(socket.timeout):
@@ -107,6 +111,9 @@ class TestClient(unittest.TestCase):
             self.assertEqual(p.wait(), 0)
 
     def test_too_long_message_from_server(self):
+        """Checks if the client finishes with error code and leaves
+        something on stderr.
+        """
         port = PORT + 9
         with mock_server(port) as s:
             p = run_client(port, pipe_stderr=True)
@@ -121,21 +128,19 @@ class TestClient(unittest.TestCase):
 class TestClientServer(unittest.TestCase):
     def test_pass_message(self):
         port = PORT + 4
-        server = run_server(port)
-        clients = [run_client(port) for _ in range(2)]
-        message = b"Unique message\n"
-        time.sleep(QUANT_SECONDS)
-        clients[0].stdin.write(message)
-        clients[0].stdin.flush()
-        time.sleep(QUANT_SECONDS)
+        with server(port):
+            clients = [run_client(port) for _ in range(2)]
+            message = b"Unique message\n"
+            time.sleep(QUANT_SECONDS)
+            clients[0].stdin.write(message)
+            clients[0].stdin.flush()
+            time.sleep(QUANT_SECONDS)
 
-        out, err = clients[1].communicate("")
-        self.assertEqual(out, message)
-        for c in clients:
-            c.stdin.close()
-            c.wait()
-        server.terminate()
-        server.wait()
+            out, err = clients[1].communicate("")
+            self.assertEqual(out, message)
+            for c in clients:
+                c.stdin.close()
+                c.wait()
 
 
 if __name__ == '__main__':
