@@ -57,6 +57,7 @@ def prepare_message(text: bytes):
 
 
 class TestServer(unittest.TestCase):
+
     def test_control_c(self):
         """Server should terminate after SIGINT."""
         p = run_server(PORT + 1)
@@ -84,8 +85,31 @@ class TestServer(unittest.TestCase):
                 a.recv(1)
             a.setblocking(True)
             a.sendall(msg)
-            a.settimeout(QUANT_SECONDS)
-            self.assertEqual(a.recv(1), b"")
+            self.assertSocketClosed(a)
+
+    def assertSocketClosed(self, a: socket.socket):
+        timeout = a.gettimeout()
+        a.settimeout(QUANT_SECONDS)
+        try:
+            msg = a.recv(1)
+        except socket.timeout as e:
+            raise Exception("Connection alive, expected closed") from e
+        self.assertEqual(msg, b"")
+        a.settimeout(timeout)
+
+    def test_message_with_endline(self):
+        port = PORT + 9
+
+        with server(port), mock_client(port) as a:
+            a.sendall(prepare_message(b"asdfsafad\nsdfsdf"))
+            self.assertSocketClosed(a)
+
+    def test_message_with_zero(self):
+        port = PORT + 10
+
+        with server(port), mock_client(port) as a:
+            a.sendall(prepare_message(b"asdfsafad\0sdfsdf"))
+            self.assertSocketClosed(a)
 
 
 class TestClient(unittest.TestCase):
@@ -105,7 +129,7 @@ class TestClient(unittest.TestCase):
         port = PORT + 3
         with mock_server(port) as s:
             p = run_client(port)
-            k, addr = s.accept()
+            s.accept()
             self.assertIsNone(p.poll())
             p.stdin.close()
             self.assertEqual(p.wait(), 0)
