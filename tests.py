@@ -10,11 +10,13 @@ from random import randint
 import sys
 
 PORT = randint(30000, 40000)
+QUANT_SECONDS = 0.1
 
 
-def run_client(port):
+def run_client(port, pipe_stderr: bool=False):
+    stderr = subprocess.PIPE if pipe_stderr else None
     return subprocess.Popen(["../ml360314/zadanie1/Debug/client", "127.0.0.1", str(port)],
-                            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr)
 
 
 def run_server(port):
@@ -39,7 +41,7 @@ def mock_client(port):
     s.close()
 
 
-def prepare_message(text):
+def prepare_message(text: bytes):
     return socket.htons(len(text)).to_bytes(2, sys.byteorder) + text
 
 
@@ -47,7 +49,7 @@ class TestServer(unittest.TestCase):
     def test_control_c(self):
         """Server should terminate after SIGINT."""
         p = run_server(PORT + 1)
-        time.sleep(1)
+        time.sleep(QUANT_SECONDS)
         p.send_signal(signal.SIGINT)
         ret = p.wait()
         self.assertEqual(ret, -2)
@@ -55,7 +57,7 @@ class TestServer(unittest.TestCase):
     def test_pass_message(self):
         port = PORT + 7
         p = run_server(port)
-        time.sleep(1)
+        time.sleep(QUANT_SECONDS)
 
         with mock_client(port) as a, mock_client(port) as b:
             msg = prepare_message(b"blah")
@@ -69,16 +71,16 @@ class TestServer(unittest.TestCase):
     def test_message_too_long(self):
         port = PORT + 8
         p = run_server(port)
-        time.sleep(1)
+        time.sleep(QUANT_SECONDS)
 
         with mock_client(port) as a:
             msg = prepare_message(b"w" * 1001)
-            a.settimeout(1)
+            a.settimeout(QUANT_SECONDS)
             with self.assertRaises(socket.timeout):
                 a.recv(1)
             a.setblocking(True)
             a.sendall(msg)
-            a.settimeout(1)
+            a.settimeout(QUANT_SECONDS)
             self.assertEqual(a.recv(1), b"")
 
 
@@ -104,6 +106,17 @@ class TestClient(unittest.TestCase):
             p.stdin.close()
             self.assertEqual(p.wait(), 0)
 
+    def test_too_long_message_from_server(self):
+        port = PORT + 9
+        with mock_server(port) as s:
+            p = run_client(port, pipe_stderr=True)
+            k, addr = s.accept()
+            k.sendall(prepare_message(b"1" * 1001))
+            p.wait()
+            _, err = p.communicate(b"")
+            self.assertIn(b"\n", err)
+            self.assertEqual(p.returncode, 100)
+
 
 class TestClientServer(unittest.TestCase):
     def test_pass_message(self):
@@ -111,10 +124,10 @@ class TestClientServer(unittest.TestCase):
         server = run_server(port)
         clients = [run_client(port) for _ in range(2)]
         message = b"Unique message\n"
-        time.sleep(2)
+        time.sleep(QUANT_SECONDS)
         clients[0].stdin.write(message)
         clients[0].stdin.flush()
-        time.sleep(1)
+        time.sleep(QUANT_SECONDS)
 
         out, err = clients[1].communicate("")
         self.assertEqual(out, message)
