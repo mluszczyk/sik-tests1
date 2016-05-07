@@ -80,22 +80,29 @@ class TestServer(unittest.TestCase):
 
         with server(port), mock_client(port) as a:
             msg = prepare_message(b"w" * 1001)
-            a.settimeout(QUANT_SECONDS)
-            with self.assertRaises(socket.timeout):
-                a.recv(1)
-            a.setblocking(True)
+            self.assertFalse(self.isSocketClosed(a))
             a.sendall(msg)
             self.assertSocketClosed(a)
 
     def assertSocketClosed(self, a: socket.socket):
+        is_closed = self.isSocketClosed(a)
+
+        if not is_closed:
+            raise Exception("Connection alive, expected closed")
+
+    def isSocketClosed(self, a):
         timeout = a.gettimeout()
         a.settimeout(QUANT_SECONDS)
         try:
             msg = a.recv(1)
-        except socket.timeout as e:
-            raise Exception("Connection alive, expected closed") from e
-        self.assertEqual(msg, b"")
+        except socket.timeout:
+            is_closed = False
+        else:
+            is_closed = True
+            if msg != b"":
+                raise Exception("Empty socket expected, received '{}'".format(str(msg)))
         a.settimeout(timeout)
+        return is_closed
 
     def test_message_with_endline(self):
         port = PORT + 9
@@ -110,6 +117,21 @@ class TestServer(unittest.TestCase):
         with server(port), mock_client(port) as a:
             a.sendall(prepare_message(b"asdfsafad\0sdfsdf"))
             self.assertSocketClosed(a)
+
+    def test_client_block(self):
+        """Checks if messages are passed while one of the client makes a pause during
+        sending another message."""
+        port = PORT + 11
+
+        with server(port), mock_client(port) as a, mock_client(port) as b, \
+                mock_client(port) as c:
+            message_wrong = prepare_message(b"xxxxx")[:5]
+            a.sendall(message_wrong)
+            self.assertFalse(self.isSocketClosed(a))
+            message_correct = prepare_message(b"yyyy")
+            b.sendall(message_correct)
+            received = c.recv(len(message_correct))
+            self.assertEqual(received, message_correct)
 
 
 class TestClient(unittest.TestCase):
