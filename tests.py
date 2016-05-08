@@ -225,6 +225,17 @@ class TestClient(unittest.TestCase):
             out, _ = p.communicate(b"")
             self.assertEqual(out, b"blahblah\n\n")
 
+    def test_read_message_too_long(self):
+        """Checks if message is split correctly."""
+        port = next(port_iterable)
+        with mock_server(port) as s, client(port) as c:
+            k, _ = s.accept()
+            c.communicate(b"a" * (MAX_MESSAGE_LEN + 1))
+            sent = k.recv(2000)
+            self.assertEqual(sent, prepare_message(b"a" * 1000) + prepare_message(b"a"))
+            ret = c.wait()
+            self.assertEqual(ret, 0)
+
 
 class TestClientServer(unittest.TestCase):
     def test_pass_message(self):
@@ -241,7 +252,6 @@ class TestClientServer(unittest.TestCase):
             self.assertEqual(out, message)
 
     def test_pass_message_max(self):
-        port = next(port_iterable)
         port = next(port_iterable)
         with server(port), client(port) as a, client(port) as b:
             clients = [a, b]
