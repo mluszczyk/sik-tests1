@@ -1,3 +1,4 @@
+import itertools
 import signal
 import subprocess
 import unittest
@@ -9,7 +10,8 @@ from random import randint
 
 import sys
 
-PORT = randint(30000, 40000)
+FIRST_PORT = randint(30000, 40000)
+port_iterable = itertools.count(FIRST_PORT)
 QUANT_SECONDS = 0.1
 
 
@@ -60,14 +62,14 @@ class TestServer(unittest.TestCase):
 
     def test_control_c(self):
         """Server should terminate after SIGINT."""
-        p = run_server(PORT + 1)
+        p = run_server(next(port_iterable))
         time.sleep(QUANT_SECONDS)
         p.send_signal(signal.SIGINT)
         ret = p.wait()
         self.assertEqual(ret, -2)
 
     def test_pass_message(self):
-        port = PORT + 7
+        port = next(port_iterable)
 
         with server(port), mock_client(port) as a, mock_client(port) as b:
             msg = prepare_message(b"blah")
@@ -76,7 +78,7 @@ class TestServer(unittest.TestCase):
             assert received == msg
 
     def test_message_too_long(self):
-        port = PORT + 8
+        port = next(port_iterable)
 
         with server(port), mock_client(port) as a:
             msg = prepare_message(b"w" * 1001)
@@ -105,14 +107,14 @@ class TestServer(unittest.TestCase):
         return is_closed
 
     def test_message_with_endline(self):
-        port = PORT + 9
+        port = next(port_iterable)
 
         with server(port), mock_client(port) as a:
             a.sendall(prepare_message(b"asdfsafad\nsdfsdf"))
             self.assertSocketClosed(a)
 
     def test_message_with_zero(self):
-        port = PORT + 10
+        port = next(port_iterable)
 
         with server(port), mock_client(port) as a:
             a.sendall(prepare_message(b"asdfsafad\0sdfsdf"))
@@ -121,7 +123,7 @@ class TestServer(unittest.TestCase):
     def test_client_block(self):
         """Checks if messages are passed while one of the client makes a pause during
         sending another message."""
-        port = PORT + 11
+        port = next(port_iterable)
 
         with server(port), mock_client(port) as a, mock_client(port) as b, \
                 mock_client(port) as c:
@@ -133,12 +135,21 @@ class TestServer(unittest.TestCase):
             received = c.recv(len(message_correct))
             self.assertEqual(received, message_correct)
 
+    def test_pass_empty_message(self):
+        port = next(port_iterable)
+        with server(port), mock_client(port) as a, mock_client(port) as b:
+            message = prepare_message(b"")
+            a.sendall(message)
+            received = b.recv(10)
+            self.assertEqual(message, received)
+
 
 class TestClient(unittest.TestCase):
     def test_break_server(self):
         """Client should finish after server closes connection."""
-        with mock_server(PORT + 2) as s:
-            p = run_client(PORT + 2)
+        port = next(port_iterable)
+        with mock_server(port) as s:
+            p = run_client(port)
             k, addr = s.accept()
             self.assertIsNone(p.poll())
             k.shutdown(socket.SHUT_RDWR)
@@ -148,7 +159,7 @@ class TestClient(unittest.TestCase):
 
     def test_end_input(self):
         """Client should disconnect after EOF."""
-        port = PORT + 3
+        port = next(port_iterable)
         with mock_server(port) as s:
             p = run_client(port)
             s.accept()
@@ -160,7 +171,7 @@ class TestClient(unittest.TestCase):
         """Checks if the client finishes with error code and leaves
         something on stderr.
         """
-        port = PORT + 9
+        port = next(port_iterable)
         with mock_server(port) as s:
             p = run_client(port, pipe_stderr=True)
             k, addr = s.accept()
@@ -172,7 +183,7 @@ class TestClient(unittest.TestCase):
 
     def test_receive_empty_message(self):
         """Checks if empty lines are received and printed."""
-        port = PORT + 13
+        port = next(port_iterable)
         with mock_server(port) as s:
             p = run_client(port)
             k, _ = s.accept()
@@ -187,7 +198,7 @@ class TestClient(unittest.TestCase):
 
 class TestClientServer(unittest.TestCase):
     def test_pass_message(self):
-        port = PORT + 4
+        port = next(port_iterable)
         with server(port):
             clients = [run_client(port) for _ in range(2)]
             message = b"Unique message\n"
