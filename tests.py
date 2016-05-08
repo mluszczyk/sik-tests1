@@ -233,6 +233,16 @@ class TestClient(unittest.TestCase):
                 ret = c.wait()
                 self.assertEqual(ret, 0)
 
+    def test_client_max_message(self):
+        """Checks if message of maximum length is correctly sent to the server."""
+        port = next(port_iterable)
+        message = b"a" * MAX_MESSAGE_LEN
+        with mock_server(port) as s, client(port) as c:
+            with s.accept()[0] as k:
+                c.communicate(message + b"\n")
+                sent = k.recv(2000)
+                self.assertEqual(sent, prepare_message(message))
+
 
 class TestClientServer(unittest.TestCase):
     def test_pass_message(self):
