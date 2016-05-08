@@ -33,7 +33,11 @@ def server(port):
         time.sleep(QUANT_SECONDS)
         yield p
     finally:
-        p.terminate()
+        try:
+            p.terminate()
+        except os.error as e:
+            if e.errno != 3:
+                raise e
         p.stdout.close()
         p.stdin.close()
         p.wait()
@@ -234,7 +238,7 @@ class TestClient(unittest.TestCase):
             with s.accept()[0] as k:
                 c.communicate(b"a" * (MAX_MESSAGE_LEN + 1))
                 sent = k.recv(2000)
-                self.assertEqual(sent, prepare_message(b"a" * 1000) + prepare_message(b"a"))
+                self.assertIn(sent, {prepare_message(b"a" * 1000) + prepare_message(b"a"), prepare_message(b"a"*1000)})
                 ret = c.wait()
                 self.assertEqual(ret, 0)
 
