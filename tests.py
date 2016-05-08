@@ -54,7 +54,7 @@ def client(port):
 def mock_server(port):
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
         s.bind(("127.0.0.1", port))
-        s.listen()
+        s.listen(4)
         yield s
 
 
@@ -110,6 +110,11 @@ class TestServer(unittest.TestCase):
             msg = a.recv(1)
         except socket.timeout:
             is_closed = False
+        except socket.error as e:
+            if e.errno == 104:
+                is_closed = True
+            else:
+                raise e
         else:
             is_closed = True
             if msg != b"":
