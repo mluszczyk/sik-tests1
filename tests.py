@@ -195,6 +195,25 @@ class TestClient(unittest.TestCase):
             p.wait()
             self.assertEqual(p.returncode, 0)
 
+    def test_receive_empty_message_after_nonempty(self):
+        """Sends nonempty message first and then an empty one to check if buffers
+        are cleaned.
+        """
+        port = next(port_iterable)
+        with mock_server(port) as s:
+            p = run_client(port)
+            k, _ = s.accept()
+            messages = [
+                prepare_message(b"blahblah"),
+                prepare_message(b"")
+            ]
+            k.sendall(messages[0])
+            k.sendall(messages[1])
+            time.sleep(QUANT_SECONDS)
+            self.assertIsNone(p.poll())
+            out, _ = p.communicate(b"")
+            self.assertEqual(out, b"blahblah\n\n")
+
 
 class TestClientServer(unittest.TestCase):
     def test_pass_message(self):
