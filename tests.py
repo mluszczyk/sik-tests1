@@ -170,6 +170,20 @@ class TestClient(unittest.TestCase):
             self.assertIn(b"\n", err)
             self.assertEqual(p.returncode, 100)
 
+    def test_receive_empty_message(self):
+        """Checks if empty lines are received and printed."""
+        port = PORT + 13
+        with mock_server(port) as s:
+            p = run_client(port)
+            k, _ = s.accept()
+            k.sendall(prepare_message(b""))
+            time.sleep(QUANT_SECONDS)
+            self.assertIsNone(p.poll())
+            out, _ = p.communicate(b"")
+            self.assertEqual(out, b"\n")
+            p.wait()
+            self.assertEqual(p.returncode, 0)
+
 
 class TestClientServer(unittest.TestCase):
     def test_pass_message(self):
