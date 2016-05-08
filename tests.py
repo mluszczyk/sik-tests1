@@ -12,7 +12,9 @@ import sys
 
 FIRST_PORT = randint(30000, 40000)
 port_iterable = itertools.count(FIRST_PORT)
+
 QUANT_SECONDS = 0.1
+MAX_MESSAGE_LEN = 1000
 
 
 def run_client(port, pipe_stderr: bool=False):
@@ -35,6 +37,16 @@ def server(port):
 
     p.terminate()
     p.wait()
+
+
+@contextmanager
+def client(port):
+    c = run_client(port)
+
+    yield c
+
+    c.stdin.close()
+    c.wait()
 
 
 @contextmanager
@@ -200,8 +212,7 @@ class TestClient(unittest.TestCase):
         are cleaned.
         """
         port = next(port_iterable)
-        with mock_server(port) as s:
-            p = run_client(port)
+        with mock_server(port) as s, client(port) as p:
             k, _ = s.accept()
             messages = [
                 prepare_message(b"blahblah"),
@@ -218,8 +229,8 @@ class TestClient(unittest.TestCase):
 class TestClientServer(unittest.TestCase):
     def test_pass_message(self):
         port = next(port_iterable)
-        with server(port):
-            clients = [run_client(port) for _ in range(2)]
+        with server(port), client(port) as a, client(port) as b:
+            clients = [a, b]
             message = b"Unique message\n"
             time.sleep(QUANT_SECONDS)
             clients[0].stdin.write(message)
@@ -228,9 +239,20 @@ class TestClientServer(unittest.TestCase):
 
             out, err = clients[1].communicate("")
             self.assertEqual(out, message)
-            for c in clients:
-                c.stdin.close()
-                c.wait()
+
+    def test_pass_message_max(self):
+        port = next(port_iterable)
+        port = next(port_iterable)
+        with server(port), client(port) as a, client(port) as b:
+            clients = [a, b]
+            message = b"a" * MAX_MESSAGE_LEN + b"\n"
+            time.sleep(QUANT_SECONDS)
+            clients[0].stdin.write(message)
+            clients[0].stdin.flush()
+            time.sleep(QUANT_SECONDS)
+
+            out, err = clients[1].communicate("")
+            self.assertEqual(out, message)
 
 
 if __name__ == '__main__':
