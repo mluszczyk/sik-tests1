@@ -1,3 +1,4 @@
+import errno
 import itertools
 import os
 import signal
@@ -18,12 +19,12 @@ MAX_MESSAGE_LEN = 1000
 
 def run_client(port, pipe_stderr: bool=False):
     stderr = subprocess.PIPE if pipe_stderr else None
-    return subprocess.Popen(["../zad1/client", "127.0.0.1", str(port)],
+    return subprocess.Popen(["../build/client", "127.0.0.1", str(port)],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr)
 
 
 def run_server(port):
-    return subprocess.Popen(["../zad1/server", str(port)],
+    return subprocess.Popen(["../build/server", str(port)],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
 
@@ -116,7 +117,7 @@ class TestServer(unittest.TestCase):
         except socket.timeout:
             is_closed = False
         except socket.error as e:
-            if e.errno == 104:
+            if e.errno == errno.ECONNRESET:
                 is_closed = True
             else:
                 raise e
@@ -189,7 +190,7 @@ class TestClient(unittest.TestCase):
                 self.assertIsNone(p.poll())
 
         ret = p.wait()
-        self.assertEqual(ret, 0)
+        self.assertEqual(ret, 100)
 
     def test_end_input(self):
         """Client should disconnect after EOF."""
