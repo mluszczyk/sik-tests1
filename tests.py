@@ -257,6 +257,22 @@ class TestClient(unittest.TestCase):
                 sent = k.recv(2000)
                 self.assertEqual(sent, prepare_message(message))
 
+    def test_client_two_part_message(self):
+        """Checks if message sent in parts is correctly merged."""
+        port = next(port_iterable)
+        message = prepare_message(b"aaaaaaaaaaaa")
+        first_part = message[:5]
+        second_part = message[5:]
+        port = next(port_iterable)
+        with mock_server(port) as s:
+            p = run_client(port, pipe_stderr=True)
+            with s.accept()[0] as k:
+                k.sendall(first_part)
+                k.sendall(second_part)
+                out, _ = p.communicate(b"")
+                p.wait()
+                self.assertEqual(out, b"aaaaaaaaaaaa\n")
+
 
 class TestClientServer(unittest.TestCase):
     def test_pass_message(self):
