@@ -38,7 +38,7 @@ def server(port):
         try:
             p.terminate()
         except os.error as e:
-            if e.errno != 3:
+            if e.errno != errno.ESRCH:
                 raise e
         p.stdout.close()
         p.stdin.close()
