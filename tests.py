@@ -146,6 +146,20 @@ class TestServer(unittest.TestCase):
             received = c.recv(len(message_correct))
             self.assertEqual(received, message_correct)
 
+    def test_client_two_part_message(self):
+        """Checks if message sent in two parts is properly merged"""
+        port = next(port_iterable)
+
+        with server(port), mock_client(port) as a, mock_client(port) as c:
+            whole_message = prepare_message(b"xxxxxxxxxx")
+            message_first_part = whole_message[:5]
+            message_second_part = whole_message[5:]
+            a.sendall(message_first_part)
+            self.assertFalse(self.isSocketClosed(a))
+            a.sendall(message_second_part)
+            received = c.recv(len(whole_message))
+            self.assertEqual(received, whole_message)
+
     def test_pass_empty_message(self):
         port = next(port_iterable)
         with server(port), mock_client(port) as a, mock_client(port) as b:
@@ -273,4 +287,4 @@ class TestClientServer(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    unittest.main(verbosity=2)
