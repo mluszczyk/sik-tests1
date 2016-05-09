@@ -19,12 +19,12 @@ MAX_MESSAGE_LEN = 1000
 
 def run_client(port, pipe_stderr: bool=False):
     stderr = subprocess.PIPE if pipe_stderr else None
-    return subprocess.Popen(["../build/client", "127.0.0.1", str(port)],
+    return subprocess.Popen(["../zad1/client", "127.0.0.1", str(port)],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr)
 
 
 def run_server(port):
-    return subprocess.Popen(["../build/server", str(port)],
+    return subprocess.Popen(["../zad1/server", str(port)],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
 
