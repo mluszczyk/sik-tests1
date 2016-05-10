@@ -1,4 +1,6 @@
+import errno
 import itertools
+import os
 import signal
 import socket
 import subprocess
@@ -33,7 +35,11 @@ def server(port):
         time.sleep(QUANT_SECONDS)
         yield p
     finally:
-        p.terminate()
+        try:
+            p.terminate()
+        except os.error as e:
+            if e.errno != errno.ESRCH:
+                raise e
         p.stdout.close()
         p.stdin.close()
         p.wait()
@@ -54,7 +60,7 @@ def client(port):
 def mock_server(port):
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
         s.bind(("127.0.0.1", port))
-        s.listen()
+        s.listen(4)
         yield s
 
 
@@ -110,6 +116,11 @@ class TestServer(unittest.TestCase):
             msg = a.recv(1)
         except socket.timeout:
             is_closed = False
+        except socket.error as e:
+            if e.errno == errno.ECONNRESET:
+                is_closed = True
+            else:
+                raise e
         else:
             is_closed = True
             if msg != b"":
@@ -179,7 +190,7 @@ class TestClient(unittest.TestCase):
                 self.assertIsNone(p.poll())
 
         ret = p.wait()
-        self.assertEqual(ret, 0)
+        self.assertEqual(ret, 100)
 
     def test_end_input(self):
         """Client should disconnect after EOF."""
@@ -243,7 +254,7 @@ class TestClient(unittest.TestCase):
             with s.accept()[0] as k:
                 c.communicate(b"a" * (MAX_MESSAGE_LEN + 1))
                 sent = k.recv(2000)
-                self.assertEqual(sent, prepare_message(b"a" * 1000) + prepare_message(b"a"))
+                self.assertIn(sent, {prepare_message(b"a" * 1000) + prepare_message(b"a"), prepare_message(b"a"*1000)})
                 ret = c.wait()
                 self.assertEqual(ret, 0)
 
